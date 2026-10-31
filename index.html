@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>تحدي الأصدقاء</title>
+<style>
+:root{--bg:#14122b;--card:#201d44;--ac:#ffcb3d;--tx:#fff;--mu:#a9a6d6;--ok:#2ecc71;--bad:#ff5b5b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;touch-action:manipulation}
+#app{max-width:520px;margin:0 auto;min-height:100%;padding:16px;display:flex;flex-direction:column;gap:12px}
+h1{margin:8px 0;text-align:center;color:var(--ac);font-size:30px}
+h2{margin:4px 0;text-align:center}
+p{margin:4px 0;text-align:center;color:var(--mu)}
+.card{background:var(--card);border-radius:16px;padding:14px}
+button,input{font:inherit;border:0;border-radius:12px}
+input[type=text]{width:100%;padding:12px;background:#2c2860;color:var(--tx);margin:4px 0;user-select:text;-webkit-user-select:text}
+.btn{background:var(--ac);color:#222;font-weight:700;padding:14px;font-size:18px;width:100%}
+.btn.s{background:#3a3680;color:var(--tx)}
+.row{display:flex;gap:8px}
+.chk{display:flex;align-items:center;gap:8px;padding:6px 0}
+.chk input{width:22px;height:22px}
+.bar{display:flex;justify-content:space-between;font-size:20px;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cell{aspect-ratio:1;font-size:34px;font-weight:800;background:#3a3680;color:var(--tx)}
+.cell.done{background:var(--ok);color:#fff;opacity:.4}
+.cell.err{background:var(--bad)}
+.pads{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pad{aspect-ratio:1;opacity:.45}
+.pad.lit{opacity:1;filter:brightness(1.4)}
+.big{flex:1;min-height:320px;font-size:28px;font-weight:800;background:#3a3680;color:var(--tx);display:flex;align-items:center;justify-content:center;text-align:center;padding:16px}
+.word{font-size:64px;font-weight:800;text-align:center;margin:20px 0}
+.cb{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cb button{padding:22px;font-size:22px;font-weight:700;color:#fff}
+table{width:100%;border-collapse:collapse}
+td{padding:9px 6px;border-bottom:1px solid #3a3680;text-align:center}
+td:first-child{text-align:right}
+.hl{color:var(--ac);font-weight:700}
+.spacer{flex:1}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const app=document.getElementById('app');
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const rnd=n=>Math.random()*n|0;
+let timers=[];
+const T=(f,ms)=>{const t=setTimeout(f,ms);timers.push(t);return t};
+const I=(f,ms)=>{const t=setInterval(f,ms);timers.push(t);return t};
+const clean=()=>{timers.forEach(t=>{clearTimeout(t);clearInterval(t)});timers=[]};
+const buzz=n=>{try{navigator.vibrate&&navigator.vibrate(n)}catch(e){}};
+const show=h=>{clean();app.innerHTML=h};
+
+const GAMES=[
+ {id:'sort',name:'🔢 ترتيب الأرقام',desc:'اضغط الأرقام من 1 إلى 9 بالترتيب بأسرع وقت. كل خطأ = +2 ثانية.',better:'low',fmt:v=>v.toFixed(1)+' ث',run:gSort},
+ {id:'mem',name:'🧠 تسلسل الألوان',desc:'احفظ تسلسل الألوان وكرّره. يزيد لون جديد كل مرة. اللي يصل لمستوى أعلى يفوز.',better:'high',fmt:v=>v+' مستوى',run:gMem},
+ {id:'tap',name:'👆 سباق النقر',desc:'اضغط الزر أكثر عدد ممكن خلال 10 ثوانٍ. يبدأ الوقت مع أول نقرة.',better:'high',fmt:v=>v+' نقرة',run:gTap},
+ {id:'react',name:'⚡ ردة الفعل',desc:'3 محاولات. اضغط فور ظهور اللون الأخضر. الضغط المبكر = 1000 م.ث.',better:'low',fmt:v=>Math.round(v)+' م.ث',run:gReact},
+ {id:'color',name:'🎨 الألوان الخادعة',desc:'20 ثانية. اضغط على لون الكلمة وليس معناها. صح +1 وخطأ -1.',better:'high',fmt:v=>v+' نقطة',run:gColor}
+];
+
+let P=[],G=[],gi=0,pi=0,R=[],TOT=[],names=['لاعب 1','لاعب 2','لاعب 3'],sel=GAMES.map(_=>true);
+
+/* ---------- الإعداد ---------- */
+function setup(){
+ show(`<h1>🎮 تحدي الأصدقاء</h1><p>بدون إنترنت · مرّروا الجهاز بينكم</p>
+ <div class="card"><h2>اللاعبون</h2>${names.map((n,i)=>`<input type="text" maxlength="14" value="${esc(n)}" data-i="${i}" class="pn">`).join('')}
+ <div class="row" style="margin-top:8px"><button class="btn s" id="add">+ إضافة لاعب</button><button class="btn s" id="rem">− حذف لاعب</button></div></div>
+ <div class="card"><h2>الألعاب</h2>${GAMES.map((g,i)=>`<label class="chk"><input type="checkbox" class="gc" data-i="${i}" ${sel[i]?'checked':''}>${g.name}</label>`).join('')}</div>
+ <button class="btn" id="go">ابدأ التحدي</button>`);
+ const sync=()=>document.querySelectorAll('.pn').forEach(e=>names[e.dataset.i]=e.value.trim()||('لاعب '+(+e.dataset.i+1)));
+ const syncG=()=>document.querySelectorAll('.gc').forEach(e=>sel[e.dataset.i]=e.checked);
+ document.getElementById('add').onclick=()=>{sync();syncG();if(names.length<8)names.push('لاعب '+(names.length+1));setup()};
+ document.getElementById('rem').onclick=()=>{sync();syncG();if(names.length>2)names.pop();setup()};
+ document.getElementById('go').onclick=()=>{
+  sync();syncG();
+  G=GAMES.filter((g,i)=>sel[i]);
+  if(!G.length){alert('اختر لعبة واحدة على الأقل');return}
+  P=[...names];TOT=P.map(_=>0);gi=0;R=[];turn(0);
+ };
+}
+
+/* ---------- الأدوار ---------- */
+function turn(p){
+ pi=p;const g=G[gi];
+ show(`<div class="bar"><span>اللعبة ${gi+1}/${G.length}</span><span>${P.length} لاعبين</span></div>
+ <div class="card"><h2>${g.name}</h2><p>${g.desc}</p></div>
+ <div class="spacer"></div>
+ <div class="card"><p>الدور على</p><h1>${esc(P[p])}</h1></div>
+ <button class="btn" id="st">جاهز؟ ابدأ!</button>`);
+ document.getElementById('st').onclick=()=>{
+  show(`<div id="stage" style="display:flex;flex-direction:column;gap:12px;flex:1"></div>`);
+  g.run(document.getElementById('stage'),v=>{R[pi]=v;endTurn(v)});
+ };
+}
+function endTurn(v){
+ const g=G[gi];
+ show(`<div class="spacer"></div><div class="card"><p>${esc(P[pi])}</p><h1>${g.fmt(v)}</h1></div><div class="spacer"></div>
+ <button class="btn" id="nx">${pi+1<P.length?'اللاعب التالي ◀':'عرض نتيجة اللعبة'}</button>`);
+ document.getElementById('nx').onclick=()=>{pi+1<P.length?turn(pi+1):roundEnd()};
+}
+function roundEnd(){
+ const g=G[gi];
+ const ord=P.map((_,i)=>i).sort((a,b)=>g.better==='low'?R[a]-R[b]:R[b]-R[a]);
+ const pts={};let rank=0;
+ ord.forEach((p,k)=>{if(k>0&&R[p]!==R[ord[k-1]])rank=k;pts[p]=P.length-rank});
+ ord.forEach(p=>TOT[p]+=pts[p]);
+ show(`<h2>${g.name}</h2><div class="card"><table>${ord.map((p,k)=>`<tr><td>${['🥇','🥈','🥉'][k]||(k+1)} ${esc(P[p])}</td><td>${g.fmt(R[p])}</td><td class="hl">+${pts[p]}</td></tr>`).join('')}</table></div>
+ <div class="spacer"></div>
+ <button class="btn" id="nx">${gi+1<G.length?'اللعبة التالية ◀':'النتيجة النهائية 🏆'}</button>`);
+ document.getElementById('nx').onclick=()=>{R=[];if(gi+1<G.length){gi++;turn(0)}else final()};
+}
+function final(){
+ const ord=P.map((_,i)=>i).sort((a,b)=>TOT[b]-TOT[a]);
+ show(`<h1>🏆 الفائز</h1><div class="card"><h1>${esc(P[ord[0]])}</h1><p>${TOT[ord[0]]} نقطة</p></div>
+ <div class="card"><table>${ord.map((p,k)=>`<tr><td>${['🥇','🥈','🥉'][k]||(k+1)} ${esc(P[p])}</td><td class="hl">${TOT[p]} نقطة</td></tr>`).join('')}</table></div>
+ <div class="spacer"></div>
+ <button class="btn" id="again">العب مرة أخرى</button><button class="btn s" id="home">تغيير اللاعبين والألعاب</button>`);
+ document.getElementById('again').onclick=()=>{TOT=P.map(_=>0);gi=0;R=[];turn(0)};
+ document.getElementById('home').onclick=setup;
+}
+
+/* ---------- 1) ترتيب الأرقام ---------- */
+function gSort(st,done){
+ let next=1,pen=0;const t0=Date.now(),nums=shuffle([1,2,3,4,5,6,7,8,9]);
+ st.innerHTML=`<div class="bar"><span>التالي: <b id="nx">1</b></span><span id="tm">0.0</span></div><div class="grid">${nums.map(n=>`<button class="cell" data-n="${n}">${n}</button>`).join('')}</div>`;
+ const tm=st.querySelector('#tm'),nx=st.querySelector('#nx');
+ I(()=>tm.textContent=((Date.now()-t0)/1000+pen).toFixed(1),100);
+ st.querySelectorAll('.cell').forEach(b=>b.onclick=()=>{
+  if(b.classList.contains('done'))return;
+  if(+b.dataset.n===next){b.classList.add('done');next++;nx.textContent=next;buzz(15);
+   if(next>9){clean();done((Date.now()-t0)/1000+pen)}}
+  else{pen+=2;buzz(80);b.classList.add('err');T(()=>b.classList.remove('err'),250)}
+ });
+}
+
+/* ---------- 2) تسلسل الألوان ---------- */
+function gMem(st,done){
+ const cols=['#e74c3c','#3498db','#2ecc71','#f1c40f'];let seq=[],idx=0,busy=true;
+ st.innerHTML=`<div class="bar"><span>المستوى: <b id="lv">0</b></span><span id="ms"></span></div><div class="pads">${cols.map((c,i)=>`<button class="pad" data-i="${i}" style="background:${c}"></button>`).join('')}</div>`;
+ const pads=[...st.querySelectorAll('.pad')],lv=st.querySelector('#lv'),ms=st.querySelector('#ms');
+ const flash=i=>{pads[i].classList.add('lit');T(()=>pads[i].classList.remove('lit'),350)};
+ function round(){
+  busy=true;idx=0;seq.push(rnd(4));lv.textContent=seq.length-1;ms.textContent='شاهد...';
+  seq.forEach((c,k)=>T(()=>flash(c),700+k*650));
+  T(()=>{busy=false;ms.textContent='دورك!'},700+seq.length*650);
+ }
+ pads.forEach((p,i)=>p.onclick=()=>{
+  if(busy)return;flash(i);buzz(15);
+  if(seq[idx]!==i){busy=true;buzz(150);T(()=>done(seq.length-1),500);return}
+  idx++;
+  if(idx===seq.length){busy=true;ms.textContent='✔';T(round,700)}
+ });
+ T(round,600);
+}
+
+/* ---------- 3) سباق النقر ---------- */
+function gTap(st,done){
+ let n=0,started=false,left=10;
+ st.innerHTML=`<div class="bar"><span>النقرات: <b id="c">0</b></span><span id="tm">10.0</span></div><button class="big" id="b">اضغط للبدء!</button>`;
+ const b=st.querySelector('#b'),c=st.querySelector('#c'),tm=st.querySelector('#tm');
+ b.onpointerdown=e=>{
+  e.preventDefault();
+  if(left<=0)return;
+  if(!started){started=true;const t0=Date.now();
+   I(()=>{left=Math.max(0,10-(Date.now()-t0)/1000);tm.textContent=left.toFixed(1);
+    if(left<=0){clean();b.disabled=true;T(()=>done(n),600)}},50)}
+  n++;c.textContent=n;b.textContent=n;buzz(8);
+ };
+}
+
+/* ---------- 4) ردة الفعل ---------- */
+function gReact(st,done){
+ let att=0,sum=0,state='idle';
+ st.innerHTML=`<div class="bar"><span>المحاولة: <b id="a">1</b>/3</span><span id="ms"></span></div><button class="big" id="b"></button>`;
+ const b=st.querySelector('#b'),a=st.querySelector('#a'),ms=st.querySelector('#ms');
+ let tStart=0,tw;
+ function wait(){
+  state='wait';b.style.background='#e74c3c';b.textContent='انتظر الأخضر...';a.textContent=att+1;
+  tw=T(()=>{state='go';b.style.background='#2ecc71';b.textContent='اضغط الآن!';tStart=performance.now()},2000+rnd(3500));
+ }
+ function record(v,msg){
+  state='idle';sum+=v;att++;ms.textContent=msg;b.style.background='#3a3680';b.textContent=msg;
+  if(att>=3)T(()=>done(sum/3),1200);else T(wait,1200);
+ }
+ b.onpointerdown=e=>{
+  e.preventDefault();
+  if(state==='wait'){clearTimeout(tw);buzz(120);record(1000,'مبكر جدًا! 1000 م.ث')}
+  else if(state==='go'){const v=performance.now()-tStart;record(v,Math.round(v)+' م.ث')}
+ };
+ b.style.background='#3a3680';b.textContent='استعد...';T(wait,900);
+}
+
+/* ---------- 5) الألوان الخادعة ---------- */
+function gColor(st,done){
+ const C=[['أحمر','#e74c3c'],['أزرق','#3498db'],['أخضر','#2ecc71'],['أصفر','#f1c40f']];
+ let score=0,over=false,w,k;
+ st.innerHTML=`<div class="bar"><span>النقاط: <b id="s">0</b></span><span id="tm">20.0</span></div><div class="word" id="w"></div><div class="cb">${C.map((c,i)=>`<button data-i="${i}" style="background:${c[1]}">${c[0]}</button>`).join('')}</div>`;
+ const wd=st.querySelector('#w'),sc=st.querySelector('#s'),tm=st.querySelector('#tm');
+ function nw(){w=rnd(4);do{k=rnd(4)}while(k===w);wd.textContent=C[w][0];wd.style.color=C[k][1]}
+ nw();const t0=Date.now();
+ I(()=>{const l=Math.max(0,20-(Date.now()-t0)/1000);tm.textContent=l.toFixed(1);
+  if(l<=0&&!over){over=true;clean();T(()=>done(score),400)}},50);
+ st.querySelectorAll('.cb button').forEach(b=>b.onclick=()=>{
+  if(over)return;
+  if(+b.dataset.i===k){score++;buzz(10)}else{score--;buzz(80)}
+  sc.textContent=score;nw();
+ });
+}
+
+setup();
+</script>
+</body>
+</html>
